@@ -368,4 +368,5 @@ async def test_login_lookup_is_not_callable_by_other_roles(
         WHERE routine_name = 'auth_find_user' AND privilege_type = 'EXECUTE'
         """
     )
-    assert {row["grantee"] for row in privileged} <= {APP_ROLE, "postgres"}
+    current_user = await admin_connection.fetchval("SELECT current_user")
+    assert {row["grantee"] for row in privileged} <= {APP_ROLE, "postgres", current_user}

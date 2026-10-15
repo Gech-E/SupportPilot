@@ -14,7 +14,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-init-roles.sh:ro
     ports:
-      - "127.0.0.1:5432:5432" # local only, never exposed on all interfaces
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432" # local only, never exposed on all interfaces
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s

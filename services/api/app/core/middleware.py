@@ -73,9 +73,9 @@ class RequestContextMiddleware:
 
     @staticmethod
     def _resolve_request_id(scope: Scope) -> str:
-        for name, value in scope["headers"]:
+        for name, value in scope.get("headers", ()):
             if name == b"x-request-id":
-                candidate = value.decode("latin-1")
+                candidate = str(value.decode("latin-1"))
                 if _REQUEST_ID_PATTERN.fullmatch(candidate):
                     return candidate
                 break
