@@ -370,3 +370,85 @@ async def test_login_lookup_is_not_callable_by_other_roles(
     )
     current_user = await admin_connection.fetchval("SELECT current_user")
     assert {row["grantee"] for row in privileged} <= {APP_ROLE, "postgres", current_user}
+
+
+async def test_documents_and_chunks_are_isolated_by_workspace(
+    admin_connection: asyncpg.Connection, app_pool: asyncpg.Pool
+) -> None:
+    doc_a = uuid.uuid4()
+    doc_b = uuid.uuid4()
+    await admin_connection.execute(
+        "INSERT INTO documents (id, workspace_id, filename, content_type, size_bytes, status) "
+        "VALUES ($1, $2, 'doc_a.txt', 'text/plain', 100, 'indexed')",
+        doc_a,
+        WORKSPACE_A,
+    )
+    await admin_connection.execute(
+        "INSERT INTO documents (id, workspace_id, filename, content_type, size_bytes, status) "
+        "VALUES ($1, $2, 'doc_b.txt', 'text/plain', 200, 'indexed')",
+        doc_b,
+        WORKSPACE_B,
+    )
+    vec = "[" + ",".join(["0.1"] * 1536) + "]"
+    await admin_connection.execute(
+        "INSERT INTO document_chunks "
+        "(workspace_id, document_id, chunk_index, content, token_count, embedding) "
+        "VALUES ($1, $2, 0, 'Chunk A content', 10, $3::vector)",
+        WORKSPACE_A,
+        doc_a,
+        vec,
+    )
+    await admin_connection.execute(
+        "INSERT INTO document_chunks "
+        "(workspace_id, document_id, chunk_index, content, token_count, embedding) "
+        "VALUES ($1, $2, 0, 'Chunk B content', 10, $3::vector)",
+        WORKSPACE_B,
+        doc_b,
+        vec,
+    )
+
+    async with as_app(app_pool) as connection:
+        assert await connection.fetch("SELECT id FROM documents") == []
+        assert await connection.fetch("SELECT id FROM document_chunks") == []
+
+    async with as_app(app_pool, workspace=WORKSPACE_A) as connection:
+        docs_a = await connection.fetch("SELECT id FROM documents")
+        chunks_a = await connection.fetch("SELECT document_id FROM document_chunks")
+        assert [r["id"] for r in docs_a] == [doc_a]
+        assert [r["document_id"] for r in chunks_a] == [doc_a]
+
+    async with as_app(app_pool, workspace=WORKSPACE_B) as connection:
+        docs_b = await connection.fetch("SELECT id FROM documents")
+        chunks_b = await connection.fetch("SELECT document_id FROM document_chunks")
+        assert [r["id"] for r in docs_b] == [doc_b]
+        assert [r["document_id"] for r in chunks_b] == [doc_b]
+
+
+async def test_cannot_insert_or_modify_document_for_another_workspace(
+    admin_connection: asyncpg.Connection, app_pool: asyncpg.Pool
+) -> None:
+    doc_b = uuid.uuid4()
+    await admin_connection.execute(
+        "INSERT INTO documents (id, workspace_id, filename, content_type, size_bytes, status) "
+        "VALUES ($1, $2, 'doc_b.txt', 'text/plain', 200, 'indexed')",
+        doc_b,
+        WORKSPACE_B,
+    )
+
+    async with as_app(app_pool, workspace=WORKSPACE_A) as connection:
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await connection.execute(
+                "INSERT INTO documents (workspace_id, filename, content_type, size_bytes, status) "
+                "VALUES ($1, 'forged.txt', 'text/plain', 100, 'pending')",
+                WORKSPACE_B,
+            )
+
+    async with as_app(app_pool, workspace=WORKSPACE_A) as connection:
+        result = await connection.execute(
+            "UPDATE documents SET filename = 'hacked.txt' WHERE id = $1", doc_b
+        )
+        assert result == "UPDATE 0"
+
+    async with as_app(app_pool, workspace=WORKSPACE_A) as connection:
+        result = await connection.execute("DELETE FROM documents WHERE id = $1", doc_b)
+        assert result == "DELETE 0"
