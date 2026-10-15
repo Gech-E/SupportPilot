@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege: the workflow can only read the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (lint, types, tests, audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: ci_admin_password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # Throwaway credentials for the ephemeral CI database only.
+      TEST_ADMIN_DSN: postgresql://postgres:ci_admin_password@localhost:5432/postgres
+      TEST_APP_PASSWORD: ci_app_password
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: services/api/pyproject.toml
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check . && ruff format --check .
+      - name: Type check
+        run: mypy app
+      - name: Test
+        run: pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
+      - name: Dependency audit
+        run: pip-audit
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

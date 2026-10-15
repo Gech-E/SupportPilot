@@ -1,0 +1,53 @@
+name: supportpilot
+
+# Required variables come from .env (copy .env.example). Compose refuses to start if one is missing.
+services:
+  db:
+    # pgvector image: vector search arrives in milestone 2, so the database is ready for it.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-init-roles.sh:ro
+    ports:
+      - "127.0.0.1:5432:5432" # local only, never exposed on all interfaces
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: ./services/api
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: ./services/api
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: postgresql+asyncpg://supportpilot_app:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  pgdata:

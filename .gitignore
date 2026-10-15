@@ -1,0 +1,31 @@
+# Secrets and local config: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Node (later milestones)
+node_modules/
+.next/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Eval and run artifacts
+reports/
