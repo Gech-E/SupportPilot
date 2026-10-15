@@ -17,6 +17,8 @@ htmlcov/
 *.egg-info/
 build/
 dist/
+*.whl
+.wheels/
 
 # Node (later milestones)
 node_modules/
