@@ -18,6 +18,12 @@ class AppError(Exception):
             self.code = code
 
 
+class BadRequestError(AppError):
+    status_code = 400
+    code = "bad_request"
+    default_message = "The request could not be processed."
+
+
 class UnauthenticatedError(AppError):
     status_code = 401
     code = "unauthenticated"
