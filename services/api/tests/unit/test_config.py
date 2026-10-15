@@ -52,6 +52,14 @@ def test_wildcard_cors_origin_is_rejected() -> None:
 
 
 def test_secrets_are_not_exposed_by_repr() -> None:
-    rendered = repr(build())
+    rendered = repr(build(anthropic_api_key=SecretStr("sk-ant-test-secret-value")))
     assert GOOD_SECRET not in rendered
     assert "u:p@localhost" not in rendered
+    assert "sk-ant-test-secret-value" not in rendered
+
+
+def test_rag_settings_defaults() -> None:
+    settings = build()
+    assert settings.redis_url == "redis://127.0.0.1:6379/0"
+    assert settings.embedding_provider == "mock"
+    assert settings.anthropic_api_key.get_secret_value() == ""

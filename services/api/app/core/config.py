@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     auth_ip_max_attempts: int = Field(default=20, ge=1)
     auth_window_seconds: int = Field(default=300, ge=1)
 
+    # Async job queue (Celery & Redis)
+    redis_url: str = "redis://127.0.0.1:6379/0"
+
+    # LLM & Embeddings (Claude API)
+    anthropic_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
+    embedding_provider: Literal["mock", "anthropic", "openai", "voyage"] = "mock"
+
     @property
     def is_hardened(self) -> bool:
         return self.app_env in _HARDENED_ENVIRONMENTS
