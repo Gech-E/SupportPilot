@@ -37,7 +37,7 @@ jobs:
       TEST_ADMIN_DSN: postgresql://postgres:ci_admin_password@localhost:5432/postgres
       TEST_APP_PASSWORD: ci_app_password
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
